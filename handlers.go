@@ -414,9 +414,41 @@ func JsonLoggingHandler(out io.Writer, h http.Handler) http.Handler {
 	return jsonLoggingHandler{out, h}
 }
 
+var panicTrace *jsonlog.StackTrace
+var traceFromChannel interface{}
+var c = make(chan interface{})
+
+
+func catchPanic(){
+	if rec := recover(); rec != nil {
+		buf := make([]byte, 10000)
+		_ = runtime.Stack(buf, false)
+		panicTrace = &jsonlog.StackTrace{
+			Message: rec.(string),
+			Trace: string(buf),
+		}
+		c <- panicTrace
+	}else{
+		c <- nil
+	}
+}
+
+func (h jsonLoggingHandler)accessLogs(c chan interface{}, w http.ResponseWriter, req *http.Request, t time.Time,  logger loggingResponseWriter){
+	defer func(){
+		traceFromChannel = <- c
+		if traceFromChannel == nil{
+			jsonLog.Access(req, w, time.Now().Sub(t) / time.Millisecond, logger.Status(), logger.Size(), nil)
+		}else{
+			jsonLog.Access(req, w, time.Now().Sub(t) / time.Millisecond, logger.Status(), logger.Size(), traceFromChannel.(*jsonlog.StackTrace))
+		}
+	}()
+}
+
 func (h jsonLoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	t := time.Now()
 	logger := makeLogger(w)
+	go h.accessLogs(c, w, req, t, logger)
+	defer catchPanic()
+	panic("hoho")
 	h.handler.ServeHTTP(logger, req)
-	jsonLog.Access(req, w, time.Now().Sub(t) / time.Millisecond, logger.Status(), logger.Size())
 }
