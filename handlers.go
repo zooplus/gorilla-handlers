@@ -16,7 +16,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	jsonlog "github.com/zooplus/golang-logging"
+	"runtime/debug"
+	jsonLog "github.com/zooplus/golang-logging"
 )
 
 // MethodHandler is an http.Handler that dispatches to a handler whose key in the
@@ -403,7 +404,8 @@ func HTTPMethodOverrideHandler(h http.Handler) http.Handler {
 	})
 }
 
-var jsonLog = jsonlog.New()
+var jsonLog = jsonLog.New()
+
 
 type jsonLoggingHandler struct {
 	writer  io.Writer
@@ -414,41 +416,25 @@ func JsonLoggingHandler(out io.Writer, h http.Handler) http.Handler {
 	return jsonLoggingHandler{out, h}
 }
 
-var panicTrace *jsonlog.StackTrace
-var traceFromChannel interface{}
-var c = make(chan interface{})
-
-
-func catchPanic(){
+func CatchPanic(){
 	if rec := recover(); rec != nil {
-		buf := make([]byte, 10000)
-		_ = runtime.Stack(buf, false)
-		panicTrace = &jsonlog.StackTrace{
-			Message: rec.(string),
-			Trace: string(buf),
-		}
-		c <- panicTrace
-	}else{
-		c <- nil
+		jsonLog.Panicf("%s: %s", rec, string(debug.Stack()))
 	}
-}
-
-func (h jsonLoggingHandler)accessLogs(c chan interface{}, w http.ResponseWriter, req *http.Request, t time.Time,  logger loggingResponseWriter){
-	defer func(){
-		traceFromChannel = <- c
-		if traceFromChannel == nil{
-			jsonLog.Access(req, w, time.Now().Sub(t) / time.Millisecond, logger.Status(), logger.Size(), nil)
-		}else{
-			jsonLog.Access(req, w, time.Now().Sub(t) / time.Millisecond, logger.Status(), logger.Size(), traceFromChannel.(*jsonlog.StackTrace))
-		}
-	}()
 }
 
 func (h jsonLoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	t := time.Now()
 	logger := makeLogger(w)
-	go h.accessLogs(c, w, req, t, logger)
-	defer catchPanic()
-	panic("hoho")
+
+	defer func() {
+		var extra map[string]interface{}
+		if rec := recover(); rec != nil {
+			extra = map[string]interface{}{
+				"description": fmt.Sprintf("%s: %s", rec, string(debug.Stack())),
+			}
+		}
+		jsonLog.Access(req, w, time.Now().Sub(t) / time.Millisecond, logger.Status(), logger.Size(), extra)
+	} ()
+
 	h.handler.ServeHTTP(logger, req)
 }
