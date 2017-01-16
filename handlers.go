@@ -17,7 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 	"runtime/debug"
-	jsonLog "github.com/zooplus/golang-logging"
+	golog "github.com/zooplus/golang-logging"
 )
 
 // MethodHandler is an http.Handler that dispatches to a handler whose key in the
@@ -404,7 +404,7 @@ func HTTPMethodOverrideHandler(h http.Handler) http.Handler {
 	})
 }
 
-var jsonLog = jsonLog.New()
+var jsonLog = golog.New()
 
 
 type jsonLoggingHandler struct {
