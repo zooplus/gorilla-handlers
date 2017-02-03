@@ -16,8 +16,9 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	jsonlog "github.com/zooplus/golang-logging"
 	"runtime/debug"
+	golog "github.com/zooplus/golang-logging"
+	"os"
 )
 
 // MethodHandler is an http.Handler that dispatches to a handler whose key in the
@@ -404,7 +405,8 @@ func HTTPMethodOverrideHandler(h http.Handler) http.Handler {
 	})
 }
 
-var jsonLog = jsonlog.New()
+var jsonLog = golog.New()
+
 
 type jsonLoggingHandler struct {
 	writer  io.Writer
@@ -421,9 +423,20 @@ func CatchPanic(){
 	}
 }
 
+func CurrentURL(r *http.Request) string {
+	hostname, err := os.Hostname()
+
+	if err != nil {
+		panic(err)
+	}
+
+	return hostname + r.URL.Path
+}
+
 func (h jsonLoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	t := time.Now()
 	logger := makeLogger(w)
+
 	defer func() {
 		var extra map[string]interface{}
 		if rec := recover(); rec != nil {
@@ -433,5 +446,6 @@ func (h jsonLoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) 
 		}
 		jsonLog.Access(req, w, time.Now().Sub(t) / time.Millisecond, logger.Status(), logger.Size(), extra)
 	} ()
+
 	h.handler.ServeHTTP(logger, req)
 }
