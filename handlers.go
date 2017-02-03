@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 	"runtime/debug"
 	golog "github.com/zooplus/golang-logging"
+	"os"
 )
 
 // MethodHandler is an http.Handler that dispatches to a handler whose key in the
@@ -420,6 +421,16 @@ func CatchPanic(){
 	if rec := recover(); rec != nil {
 		jsonLog.Panicf("%s: %s", rec, string(debug.Stack()))
 	}
+}
+
+func CurrentURL(r *http.Request) string {
+	hostname, err := os.Hostname()
+
+	if err != nil {
+		panic(err)
+	}
+
+	return hostname + r.URL.Path
 }
 
 func (h jsonLoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
